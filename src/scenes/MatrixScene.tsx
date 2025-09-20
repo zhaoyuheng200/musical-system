@@ -1,55 +1,123 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { Text } from '@react-three/drei'
 import { InstancedMesh, Object3D, Color } from 'three'
 
-interface MatrixBoxProps {
-  count?: number
+interface MatrixSceneProps {
+  rows?: number
+  cols?: number
 }
 
-export default function MatrixScene({ count = 100 }: MatrixBoxProps) {
+export default function MatrixScene({ rows = 32, cols = 32 }: MatrixSceneProps) {
   const meshRef = useRef<InstancedMesh>(null!)
   const tempObject = useMemo(() => new Object3D(), [])
+  const [currentPattern, setCurrentPattern] = useState('Sequential')
   
-  // Generate random data for each box
-  const boxData = useMemo(() => {
+  const totalCells = rows * cols
+  const cellSize = 0.15
+  const spacing = 0.18
+  
+  // Generate grid positions and memory access simulation
+  const matrixData = useMemo(() => {
     const data = []
-    for (let i = 0; i < count; i++) {
-      data.push({
-        x: (Math.random() - 0.5) * 20,
-        y: Math.random() * 10 + 5,
-        z: 0, // Keep it 2D
-        speed: Math.random() * 0.02 + 0.01,
-        size: Math.random() * 0.3 + 0.1,
-        opacity: Math.random() * 0.8 + 0.2,
-        hue: Math.random() * 60 + 100 // Green-ish colors
-      })
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const index = row * cols + col
+        data.push({
+          index,
+          row,
+          col,
+          x: (col - cols / 2) * spacing,
+          y: (rows / 2 - row) * spacing,
+          z: 0,
+          baseColor: 0.2, // Base blue/gray
+          accessTime: 0,
+          isAccessed: false
+        })
+      }
     }
     return data
-  }, [count])
+  }, [rows, cols, spacing])
 
+  // Simulate memory access patterns
   useFrame((state) => {
     if (!meshRef.current) return
 
-    // Update each box instance
-    boxData.forEach((box, i) => {
-      // Update position (falling effect)
-      box.y -= box.speed
-      
-      // Reset to top when it falls off screen
-      if (box.y < -5) {
-        box.y = Math.random() * 5 + 10
-        box.x = (Math.random() - 0.5) * 20
+    const time = state.clock.elapsedTime
+    const patternIndex = Math.floor(time * 2) % 4
+    
+    // Update pattern name
+    const patterns = ['Sequential', 'Random', 'Block', 'Stride']
+    const newPattern = patterns[patternIndex]
+    if (newPattern !== currentPattern) {
+      setCurrentPattern(newPattern)
+    }
+    
+    // Simulate different memory access patterns
+    if (patternIndex === 0) {
+      // Sequential access pattern
+      const currentIndex = Math.floor((time * 10) % totalCells)
+      matrixData.forEach((cell, i) => {
+        cell.isAccessed = i === currentIndex
+        if (cell.isAccessed) cell.accessTime = time
+      })
+    } else if (patternIndex === 1) {
+      // Random access pattern
+      if (Math.floor(time * 5) !== Math.floor((time - 0.016) * 5)) {
+        const randomIndex = Math.floor(Math.random() * totalCells)
+        matrixData[randomIndex].isAccessed = true
+        matrixData[randomIndex].accessTime = time
       }
+    } else if (patternIndex === 2) {
+      // Block access pattern (cache-friendly)
+      const blockSize = 4
+      const blockIndex = Math.floor((time * 3) % (totalCells / (blockSize * blockSize)))
+      const startRow = Math.floor(blockIndex / (cols / blockSize)) * blockSize
+      const startCol = (blockIndex % (cols / blockSize)) * blockSize
+      
+      matrixData.forEach((cell) => {
+        cell.isAccessed = cell.row >= startRow && cell.row < startRow + blockSize &&
+                         cell.col >= startCol && cell.col < startCol + blockSize
+        if (cell.isAccessed) cell.accessTime = time
+      })
+    } else {
+      // Stride access pattern
+      const stride = 4
+      const startIndex = Math.floor((time * 8) % stride)
+      matrixData.forEach((cell, i) => {
+        cell.isAccessed = (i - startIndex) % stride === 0 && i >= startIndex
+        if (cell.isAccessed) cell.accessTime = time
+      })
+    }
 
-      // Set transform
-      tempObject.position.set(box.x, box.y, box.z)
-      tempObject.scale.setScalar(box.size)
+    // Update visual representation
+    matrixData.forEach((cell, i) => {
+      // Position
+      tempObject.position.set(cell.x, cell.y, cell.z)
+      tempObject.scale.setScalar(cellSize)
       tempObject.updateMatrix()
       meshRef.current.setMatrixAt(i, tempObject.matrix)
 
-      // Set color with some variation
-      const greenIntensity = Math.sin(state.clock.elapsedTime + i * 0.1) * 0.3 + 0.7
-      const color = new Color().setHSL(box.hue / 360, 0.8, greenIntensity * box.opacity)
+      // Color based on access state and recency
+      let color: Color
+      const timeSinceAccess = time - cell.accessTime
+      
+      if (cell.isAccessed) {
+        // Currently being accessed - bright red
+        color = new Color(1, 0.2, 0.2)
+      } else if (timeSinceAccess < 1) {
+        // Recently accessed - fade from red to blue
+        const fade = timeSinceAccess
+        color = new Color(1 - fade * 0.8, 0.2, 0.2 + fade * 0.6)
+      } else if (timeSinceAccess < 5) {
+        // Was accessed in last 5 seconds - blue
+        const fade = Math.min(1, (timeSinceAccess - 1) / 4)
+        color = new Color(0.2, 0.3, 0.8 - fade * 0.4)
+      } else {
+        // Not recently accessed - gray
+        color = new Color(0.3, 0.3, 0.4)
+      }
+      
       meshRef.current.setColorAt(i, color)
     })
 
@@ -61,17 +129,55 @@ export default function MatrixScene({ count = 100 }: MatrixBoxProps) {
 
   return (
     <group>
-      {/* Use orthographic-like perspective for 2D feel */}
-      <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-        <planeGeometry args={[0.8, 0.8]} />
-        <meshBasicMaterial transparent opacity={0.8} />
+      <instancedMesh ref={meshRef} args={[undefined, undefined, totalCells]}>
+        <boxGeometry args={[1, 1, 0.1]} />
+        <meshBasicMaterial />
       </instancedMesh>
       
-      {/* Add some background elements for depth */}
-      <mesh position={[0, 0, -2]} scale={[25, 15, 1]}>
+      {/* Grid background */}
+      <mesh position={[0, 0, -0.1]} scale={[cols * spacing + 1, rows * spacing + 1, 1]}>
         <planeGeometry />
-        <meshBasicMaterial color="#000a00" transparent opacity={0.3} />
+        <meshBasicMaterial color="#1a1a1a" transparent opacity={0.8} />
       </mesh>
+      
+      {/* Title showing current access pattern */}
+      <Text
+        position={[0, (rows / 2 + 2.5) * spacing, 0.1]}
+        fontSize={0.3}
+        color="#61dafb"
+        anchorX="center"
+        anchorY="middle"
+      >
+        Memory Access Pattern: {currentPattern}
+      </Text>
+      
+      {/* Column numbers (top) */}
+      {Array.from({ length: cols }, (_, col) => (
+        <Text
+          key={`col-${col}`}
+          position={[(col - cols / 2) * spacing, (rows / 2 + 1) * spacing, 0.1]}
+          fontSize={0.12}
+          color="white"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {col}
+        </Text>
+      ))}
+      
+      {/* Row numbers (left) */}
+      {Array.from({ length: rows }, (_, row) => (
+        <Text
+          key={`row-${row}`}
+          position={[(-cols / 2 - 1) * spacing, (rows / 2 - row) * spacing, 0.1]}
+          fontSize={0.12}
+          color="white"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {row}
+        </Text>
+      ))}
     </group>
   )
 }

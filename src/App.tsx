@@ -23,7 +23,7 @@ function App() {
             className={currentScene === 'matrix' ? 'active' : ''}
             onClick={() => setCurrentScene('matrix')}
           >
-            Matrix 2D
+            Memory Matrix
           </button>
           <button 
             className={currentScene === 'sphere' ? 'active' : ''}
@@ -52,7 +52,7 @@ function App() {
           
           {/* Scene content */}
           {currentScene === 'cube' && <RotatingCube />}
-          {currentScene === 'matrix' && <MatrixScene count={150} />}
+          {currentScene === 'matrix' && <MatrixScene rows={24} cols={32} />}
           
           {/* Controls for user interaction - disabled for matrix scene */}
           {currentScene !== 'matrix' && (
@@ -72,7 +72,7 @@ function App() {
         <h3>Scene Info</h3>
         <p>
           {currentScene === 'cube' && 'A simple rotating cube to get started with Three.js'}
-          {currentScene === 'matrix' && 'A 2D Matrix-style falling boxes animation using instanced rendering'}
+          {currentScene === 'matrix' && 'Memory access pattern visualization: 24x32 grid showing different memory access patterns (sequential, random, block, stride)'}
           {currentScene === 'sphere' && 'More scenes coming soon!'}
         </p>
         <div className="controls-info">
@@ -86,9 +86,10 @@ function App() {
               </>
             ) : (
               <>
-                <li>Watch the falling green boxes</li>
-                <li>Each box has random speed and opacity</li>
-                <li>Colors pulse with time variations</li>
+                <li>🔴 Red: Currently being accessed</li>
+                <li>🔵 Blue: Recently accessed memory</li>
+                <li>⚫ Gray: Inactive memory cells</li>
+                <li>Patterns cycle: Sequential → Random → Block → Stride</li>
               </>
             )}
           </ul>
