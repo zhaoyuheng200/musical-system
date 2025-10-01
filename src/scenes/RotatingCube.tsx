@@ -6,7 +6,7 @@ export default function RotatingCube() {
   const meshRef = useRef<Mesh>(null!)
 
   // This hook runs every frame and rotates the cube
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     if (meshRef.current) {
       meshRef.current.rotation.x += delta
       meshRef.current.rotation.y += delta * 0.7
