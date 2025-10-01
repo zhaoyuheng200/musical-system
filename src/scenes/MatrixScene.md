@@ -99,30 +99,68 @@ const spacing = 0.18
 
 ```tsx
 const matrixData = useMemo(() => {
-  const data = []
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      const index = row * cols + col
-      data.push({
-        index,
-        row,
-        col,
-        x: (col - cols / 2) * spacing,
-        y: (rows / 2 - row) * spacing,
-        z: 0,
-        baseColor: 0.2,
-        accessTime: 0,
-        isAccessed: false
-      })
-    }
-  }
-  return data
+  // ...same as before...
 }, [rows, cols, spacing])
 ```
 
-**What this does:** Creates data for every memory cell:
-- **Nested loops**: `for` loops create a grid - outer loop for rows, inner for columns
-- **index**: Converts 2D position (row, col) to 1D array index
+**What this does:** Creates data for every memory cell (see code for details). This section is unchanged, but now the hover logic is handled separately (see below).
+## User Interaction: Zoom and Hover Tooltips
+
+### Zooming (OrbitControls)
+
+Zooming in and out is enabled using the `OrbitControls` component from Drei, but only zoom is allowed for the matrix scene (panning and rotation are disabled). This is configured in the parent `App.tsx`:
+
+```tsx
+<OrbitControls 
+  enablePan={false}
+  enableZoom={true}
+  enableRotate={false}
+  minDistance={5}
+  maxDistance={50}
+/>
+```
+
+This allows the user to scroll to zoom in and out on the memory grid, making it easier to inspect individual cells.
+
+### Hover Tooltips (HTML Overlay)
+
+When the user hovers over a memory cell, a tooltip showing the cell's row and column is displayed. This is implemented by lifting the hover state up to the parent `App.tsx` using the `onHover` prop:
+
+1. **In MatrixScene.tsx:**
+   - The `onHover` prop is called with `{ row, col, x, y }` when a cell is hovered, or `null` when not hovering.
+2. **In App.tsx:**
+   - The `hoveredCell` state is updated via `setHoveredCell`.
+   - The tooltip is rendered as a fixed-position HTML `<div>` outside the Three.js canvas, using the screen coordinates from the event.
+
+**Why this approach?**
+- HTML overlays (like tooltips) cannot be rendered inside the Three.js scene. Attempting to render a `<div>` inside the Canvas will cause errors.
+- By reporting hover state to the parent and rendering the tooltip as HTML, we keep the 3D scene and UI overlays cleanly separated.
+
+**Example (App.tsx):**
+```tsx
+{hoveredCell && (
+  <div style={{
+    position: 'fixed',
+    left: hoveredCell.x + 10,
+    top: hoveredCell.y - 30,
+    background: 'rgba(0, 0, 0, 0.8)',
+    color: 'white',
+    padding: '8px 12px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    pointerEvents: 'none',
+    zIndex: 1000,
+    border: '1px solid #61dafb'
+  }}>
+    Row: {hoveredCell.row}, Col: {hoveredCell.col}
+  </div>
+)}
+```
+
+### Summary of User Interaction
+- **Zoom:** Use mouse scroll to zoom in/out on the grid.
+- **Hover:** Move the mouse over a cell to see its coordinates in a tooltip.
+- **Patterns:** The memory access pattern cycles automatically (sequential, random, block, stride).
 - **x, y coordinates**: Calculates where each cell should appear in 3D space
   - Subtracting half the grid size centers the grid at (0,0)
 - **z = 0**: Keeps everything flat (2D)
@@ -373,4 +411,4 @@ return (
 - **Block**: Reading chunks of memory (very cache-friendly)
 - **Stride**: Reading every Nth location (can be cache-unfriendly)
 
-This visualization helps understand how different memory access patterns affect computer performance by showing which memory locations are being used and when.
+This visualization helps understand how different memory access patterns affect computer performance by showing which memory locations are being used and when. The interactive zoom and hover tooltip features make it easy to explore the grid and see exactly which cell is being accessed at any moment.

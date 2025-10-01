@@ -7,6 +7,7 @@ import './App.css'
 
 function App() {
   const [currentScene, setCurrentScene] = useState<'cube' | 'matrix' | 'sphere'>('cube')
+  const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number; x: number; y: number } | null>(null)
 
   return (
     <div className="app">
@@ -52,16 +53,16 @@ function App() {
           
           {/* Scene content */}
           {currentScene === 'cube' && <RotatingCube />}
-          {currentScene === 'matrix' && <MatrixScene rows={24} cols={32} />}
+          {currentScene === 'matrix' && <MatrixScene rows={24} cols={32} onHover={setHoveredCell} />}
           
-          {/* Controls for user interaction - disabled for matrix scene */}
-          {currentScene !== 'matrix' && (
-            <OrbitControls 
-              enablePan={true}
-              enableZoom={true}
-              enableRotate={true}
-            />
-          )}
+          {/* Controls for user interaction */}
+          <OrbitControls 
+            enablePan={currentScene !== 'matrix'}
+            enableZoom={true}
+            enableRotate={currentScene !== 'matrix'}
+            minDistance={currentScene === 'matrix' ? 5 : 1}
+            maxDistance={currentScene === 'matrix' ? 50 : 100}
+          />
           
           {/* Performance stats */}
           <Stats />
@@ -89,12 +90,35 @@ function App() {
                 <li>🔴 Red: Currently being accessed</li>
                 <li>🔵 Blue: Recently accessed memory</li>
                 <li>⚫ Gray: Inactive memory cells</li>
+                <li>🔍 Scroll: Zoom in/out to inspect cells</li>
+                <li>🖱️ Hover: Shows cell coordinates</li>
                 <li>Patterns cycle: Sequential → Random → Block → Stride</li>
               </>
             )}
           </ul>
         </div>
       </aside>
+
+      {/* Tooltip for hovered cell - outside Canvas */}
+      {hoveredCell && (
+        <div
+          style={{
+            position: 'fixed',
+            left: hoveredCell.x + 10,
+            top: hoveredCell.y - 30,
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            border: '1px solid #61dafb'
+          }}
+        >
+          Row: {hoveredCell.row}, Col: {hoveredCell.col}
+        </div>
+      )}
     </div>
   )
 }

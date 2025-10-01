@@ -1,17 +1,21 @@
 import { useRef, useMemo, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Text } from '@react-three/drei'
-import { InstancedMesh, Object3D, Color } from 'three'
+import { InstancedMesh, Object3D, Color, Raycaster, Vector2 } from 'three'
 
 interface MatrixSceneProps {
   rows?: number
   cols?: number
+  onHover?: (cellInfo: { row: number; col: number; x: number; y: number } | null) => void
 }
 
-export default function MatrixScene({ rows = 32, cols = 32 }: MatrixSceneProps) {
+export default function MatrixScene({ rows = 32, cols = 32, onHover }: MatrixSceneProps) {
   const meshRef = useRef<InstancedMesh>(null!)
   const tempObject = useMemo(() => new Object3D(), [])
   const [currentPattern, setCurrentPattern] = useState('Sequential')
+  const { camera, gl } = useThree()
+  const raycaster = useMemo(() => new Raycaster(), [])
+  const mouse = useMemo(() => new Vector2(), [])
   
   const totalCells = rows * cols
   const cellSize = 0.15
@@ -38,6 +42,38 @@ export default function MatrixScene({ rows = 32, cols = 32 }: MatrixSceneProps) 
     }
     return data
   }, [rows, cols, spacing])
+
+  // Handle mouse move for hover detection
+  const handlePointerMove = (event: any) => {
+    if (!onHover) return
+    
+    // Get mouse position in normalized device coordinates
+    const rect = gl.domElement.getBoundingClientRect()
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+    // Update raycaster
+    raycaster.setFromCamera(mouse, camera)
+    
+    if (meshRef.current) {
+      const intersects = raycaster.intersectObject(meshRef.current)
+      
+      if (intersects.length > 0) {
+        const instanceId = intersects[0].instanceId
+        if (instanceId !== undefined && instanceId < matrixData.length) {
+          const cell = matrixData[instanceId]
+          onHover({
+            row: cell.row,
+            col: cell.col,
+            x: event.clientX,
+            y: event.clientY
+          })
+        }
+      } else {
+        onHover(null)
+      }
+    }
+  }
 
   // Simulate memory access patterns
   useFrame((state) => {
@@ -128,11 +164,12 @@ export default function MatrixScene({ rows = 32, cols = 32 }: MatrixSceneProps) 
   })
 
   return (
-    <group>
-      <instancedMesh ref={meshRef} args={[undefined, undefined, totalCells]}>
-        <boxGeometry args={[1, 1, 0.1]} />
-        <meshBasicMaterial />
-      </instancedMesh>
+    <>
+      <group onPointerMove={handlePointerMove} onPointerLeave={() => onHover?.(null)}>
+        <instancedMesh ref={meshRef} args={[undefined, undefined, totalCells]}>
+          <boxGeometry args={[1, 1, 0.1]} />
+          <meshBasicMaterial />
+        </instancedMesh>
       
       {/* Grid background */}
       <mesh position={[0, 0, -0.1]} scale={[cols * spacing + 1, rows * spacing + 1, 1]}>
@@ -178,6 +215,7 @@ export default function MatrixScene({ rows = 32, cols = 32 }: MatrixSceneProps) 
           {row}
         </Text>
       ))}
-    </group>
+      </group>
+    </>
   )
 }
